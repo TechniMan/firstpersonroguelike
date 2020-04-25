@@ -1,24 +1,40 @@
-import tcod as libtcod
+import tcod
+import tcod.console
+import tcod.event
+
 from input_handlers import handle_keys
+from entity import Entity
+from render_functions import clear_all, render_all
+from map_objects.game_map import GameMap
 
 
 def main():
     screen_width = 80
     screen_height = 50
+    map_width = 80
+    map_height = 45
 
-    libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
-    libtcod.console_init_root(screen_width, screen_height, 'libtcod tutorial revised', False)
-    con = libtcod.console_new(screen_width, screen_height)
+    colours = {
+        'dark_wall': tcod.Color(0, 0, 100),
+        'dark_ground': tcod.Color(50, 50, 150)
+    }
 
-    player_x = int(screen_width / 2)
-    player_y = int(screen_height / 2)
+    tcod.console_set_custom_font('arial10x10.png', tcod.FONT_TYPE_GREYSCALE | tcod.FONT_LAYOUT_TCOD)
+    tcod.console_init_root(screen_width, screen_height, 'tcod tutorial part 2', vsync=True)
+    con = tcod.console.Console(screen_width, screen_height)
 
-    key = libtcod.Key()
-    mouse = libtcod.Mouse()
+    game_map = GameMap(map_width, map_height)
 
-    while not libtcod.console_is_window_closed():
+    player = Entity(int(screen_width / 2), int(screen_height / 2), '@', tcod.white)
+    npc = Entity(int(screen_width / 2) - 5, int(screen_height / 2) - 5, '!', tcod.yellow)
+    entities = [npc, player]
+
+    key = tcod.Key()
+    mouse = tcod.Mouse()
+
+    while not tcod.console_is_window_closed():
         # handle inputs
-        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS, key, mouse)
+        tcod.sys_check_for_event(tcod.EVENT_KEY_PRESS, key, mouse)
         action = handle_keys(key)
         move = action.get('move')
         exit = action.get('exit')
@@ -27,32 +43,20 @@ def main():
         if exit:
             break
         elif fullscreen:
-            libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
+            tcod.console_set_fullscreen(not tcod.console_is_fullscreen())
         elif move:
             dx, dy = move
-            player_x += dx
-            player_y += dy
+            if not game_map.is_blocked(player.x + dx, player.y + dy):
+                player.move(dx, dy)
 
         # exit
-        if key.vk == libtcod.KEY_ESCAPE:
+        if key.vk == tcod.KEY_ESCAPE:
             return True
 
-        # move the player *character*! geddit?
-        if key.vk == libtcod.KEY_UP:
-            player_y -= 1
-        if key.vk == libtcod.KEY_DOWN:
-            player_y += 1
-        if key.vk == libtcod.KEY_LEFT:
-            player_x -= 1
-        if key.vk == libtcod.KEY_RIGHT:
-            player_x += 1
-
         # draw to screen
-        libtcod.console_clear(con)
-        libtcod.console_set_default_foreground(con, libtcod.white)
-        libtcod.console_blit(con, 0, 0, screen_width, screen_height, 0, 0, 0)
-        libtcod.console_put_char(con, player_x, player_y, '@', libtcod.BKGND_NONE)
-        libtcod.console_flush()
+        render_all(con, entities, game_map, screen_width, screen_height, colours)
+        tcod.console_flush()
+        clear_all(con, entities)
 
 
 if __name__ == '__main__':
