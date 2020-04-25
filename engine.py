@@ -3,10 +3,11 @@ import tcod.console
 import tcod.event
 
 from input_handlers import handle_keys
-from entity import Entity
+from entity import Entity, get_blocking_entities_at_location
 from render_functions import clear_all, render_all
 from map_objects.game_map import GameMap
 from fov_functions import initialise_fov, recompute_fov
+from game_states import GameStates
 
 
 def main():
@@ -18,11 +19,14 @@ def main():
     room_min_size = 6
     room_max_size = 10
     max_rooms = 30
+    max_monsters_per_room = 3
     # fov vars
     fov_algorithm = 0
     fov_light_walls = True
     fov_radius = 10
     fov_recompute = True
+    # game vars
+    game_state = GameStates.PLAYER_TURN
 
     colours = {
         'dark_wall': tcod.Color(0, 0, 100),
@@ -32,50 +36,62 @@ def main():
     }
 
     tcod.console_set_custom_font('arial10x10.png', tcod.FONT_TYPE_GREYSCALE | tcod.FONT_LAYOUT_TCOD)
-    tcod.console_init_root(screen_width, screen_height, 'tcod tutorial part 2', vsync=True)
-    con = tcod.console.Console(screen_width, screen_height)
+    with tcod.console_init_root(screen_width, screen_height, 'tcod tutorial part 2', vsync=True) as root_console:
+        con = tcod.console.Console(screen_width, screen_height)
 
-    player = Entity(int(screen_width / 2), int(screen_height / 2), '@', tcod.white)
-    npc = Entity(int(screen_width / 2) - 5, int(screen_height / 2) - 5, '!', tcod.yellow)
-    entities = [npc, player]
+        player = Entity(0, 0, '@', tcod.white, 'Player', blocks=True)
+        entities = [player]
 
-    game_map = GameMap(map_width, map_height)
-    game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height, player)
-    fov_map = initialise_fov(game_map)
+        game_map = GameMap(map_width, map_height)
+        game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height,
+                          player, entities, max_monsters_per_room)
+        fov_map = initialise_fov(game_map)
 
-    key = tcod.Key()
-    mouse = tcod.Mouse()
+        key = tcod.Key()
+        mouse = tcod.Mouse()
 
-    while not tcod.console_is_window_closed():
-        # handle inputs
-        tcod.sys_check_for_event(tcod.EVENT_KEY_PRESS, key, mouse)
-        action = handle_keys(key)
-        move = action.get('move')
-        exit = action.get('exit')
-        fullscreen = action.get('fullscreen')
+        while True:
+            tcod.console_flush()
 
-        if exit:
-            break
-        elif fullscreen:
-            tcod.console_set_fullscreen(not tcod.console_is_fullscreen())
-        elif move:
-            dx, dy = move
-            if not game_map.is_blocked(player.x + dx, player.y + dy):
-                player.move(dx, dy)
-                fov_recompute = True
+            # handle inputs
+            tcod.sys_check_for_event(tcod.EVENT_KEY_PRESS, key, mouse)
+            action = handle_keys(key)
 
-        if fov_recompute:
-            recompute_fov(fov_map, player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
+            if action.get('exit'):
+                break
+            elif action.get('fullscreen'):
+                tcod.console_set_fullscreen(not tcod.console_is_fullscreen())
+            elif action.get('move') and game_state == GameStates.PLAYER_TURN:
+                dx, dy = action.get('move')
+                to_x, to_y = player.x + dx, player.y + dy
+                if not game_map.is_blocked(to_x, to_y):
+                    target = get_blocking_entities_at_location(entities, to_x, to_y)
+                    if target:
+                        print('You kick the ' + target.name + ' in the shins, much to its chagrin!')
+                    else:
+                        player.move(dx, dy)
+                        fov_recompute = True
+                    # end our turn
+                    game_state = GameStates.ENEMIES_TURN
+            elif game_state == GameStates.ENEMIES_TURN:
+                for entity in entities:
+                    if entity == player:
+                        continue
+                    print('The ' + entity.name + ' ponders... why are we here?')
+                game_state = GameStates.PLAYER_TURN
 
-        # exit
-        if key.vk == tcod.KEY_ESCAPE:
-            return True
+            if fov_recompute:
+                recompute_fov(fov_map, player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
 
-        # draw to screen
-        render_all(con, entities, game_map, fov_map, fov_recompute, screen_width, screen_height, colours)
-        fov_recompute = False
-        tcod.console_flush()
-        clear_all(con, entities)
+            # exit
+            if key.vk == tcod.KEY_ESCAPE:
+                return True
+
+            # draw to screen
+            render_all(con, entities, game_map, fov_map, fov_recompute, screen_width, screen_height, colours)
+            fov_recompute = False
+            tcod.console_flush()
+            clear_all(con, entities)
 
 
 if __name__ == '__main__':

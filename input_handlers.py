@@ -11,13 +11,13 @@ def handle_keys(key):
         return {'fullscreen': True}
 
     # Movement keys
-    if key.vk == libtcod.KEY_UP:
+    if key.vk == libtcod.KEY_UP or key.vk == 'W':
         return {'move': (0, -1)}
-    elif key.vk == libtcod.KEY_DOWN:
+    elif key.vk == libtcod.KEY_DOWN or key.vk == 's':
         return {'move': (0, 1)}
-    elif key.vk == libtcod.KEY_LEFT:
+    elif key.vk == libtcod.KEY_LEFT or key.vk == 'a':
         return {'move': (-1, 0)}
-    elif key.vk == libtcod.KEY_RIGHT:
+    elif key.vk == libtcod.KEY_RIGHT or key.vk == 'd':
         return {'move': (1, 0)}
 
     # No key was pressed
