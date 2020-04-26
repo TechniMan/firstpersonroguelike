@@ -4,10 +4,11 @@ import tcod.event
 
 from input_handlers import handle_keys
 from entity import Entity, get_blocking_entities_at_location
-from render_functions import clear_all, render_all
+from render_functions import clear_all, render_all, RenderOrder
 from map_objects.game_map import GameMap
-from fov_functions import initialise_fov, recompute_fov
 from game_states import GameStates
+from components.fighter import Fighter
+from death_functions import kill_monster, kill_player
 
 
 def main():
@@ -21,7 +22,7 @@ def main():
     max_rooms = 30
     max_monsters_per_room = 3
     # fov vars
-    fov_algorithm = 0
+    fov_algorithm = 12
     fov_light_walls = True
     fov_radius = 10
     fov_recompute = True
@@ -39,13 +40,15 @@ def main():
     with tcod.console_init_root(screen_width, screen_height, 'tcod tutorial part 2', vsync=True) as root_console:
         con = tcod.console.Console(screen_width, screen_height)
 
-        player = Entity(0, 0, '@', tcod.white, 'Player', blocks=True)
+        fighter_component = Fighter(30, 2, 5)
+        player = Entity(0, 0, '@', tcod.white, 'Player', render_order=RenderOrder.ACTOR, blocks=True,
+                        fighter=fighter_component)
         entities = [player]
 
         game_map = GameMap(map_width, map_height)
         game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height,
                           player, entities, max_monsters_per_room)
-        fov_map = initialise_fov(game_map)
+        game_map.recompute_fov(player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
 
         key = tcod.Key()
         mouse = tcod.Mouse()
@@ -57,6 +60,8 @@ def main():
             tcod.sys_check_for_event(tcod.EVENT_KEY_PRESS, key, mouse)
             action = handle_keys(key)
 
+            player_turn_results = []
+
             if action.get('exit'):
                 break
             elif action.get('fullscreen'):
@@ -64,34 +69,63 @@ def main():
             elif action.get('move') and game_state == GameStates.PLAYER_TURN:
                 dx, dy = action.get('move')
                 to_x, to_y = player.x + dx, player.y + dy
-                if not game_map.is_blocked(to_x, to_y):
+                if game_map.walkable(to_x, to_y):
                     target = get_blocking_entities_at_location(entities, to_x, to_y)
                     if target:
-                        print('You kick the ' + target.name + ' in the shins, much to its chagrin!')
+                        player_turn_results.extend(player.fighter.attack(target))
                     else:
                         player.move(dx, dy)
                         fov_recompute = True
                     # end our turn
                     game_state = GameStates.ENEMIES_TURN
-            elif game_state == GameStates.ENEMIES_TURN:
+
+            for ptr in player_turn_results:
+                message = ptr.get('message')
+                dead_entity = ptr.get('dead')
+
+                if message:
+                    print(message)
+                if dead_entity:
+                    if dead_entity == player:
+                        message, game_state = kill_player(player)
+                    else:
+                        message = kill_monster(dead_entity)
+                    print(message)
+
+            # run the enemy turn immediately
+            if game_state == GameStates.ENEMIES_TURN:
                 for entity in entities:
-                    if entity == player:
-                        continue
-                    print('The ' + entity.name + ' ponders... why are we here?')
-                game_state = GameStates.PLAYER_TURN
+                    if entity.ai:
+                        enemy_turn_results = entity.ai.take_turn(player, game_map, entities)
+
+                        for etr in enemy_turn_results:
+                            message = etr.get('message')
+                            dead_entity = etr.get('dead')
+
+                            if message:
+                                print(message)
+                            if dead_entity:
+                                if dead_entity == player:
+                                    message, game_state = kill_player(player)
+                                else:
+                                    message = kill_monster(dead_entity)
+                                print(message)
+                                if game_state == GameStates.PLAYER_DEAD:
+                                    break
+                        if game_state == GameStates.PLAYER_DEAD:
+                            break
+                else:
+                    game_state = GameStates.PLAYER_TURN
+            # endif game_state
 
             if fov_recompute:
-                recompute_fov(fov_map, player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
-
-            # exit
-            if key.vk == tcod.KEY_ESCAPE:
-                return True
+                game_map.recompute_fov(player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
 
             # draw to screen
-            render_all(con, entities, game_map, fov_map, fov_recompute, screen_width, screen_height, colours)
-            fov_recompute = False
+            render_all(con, entities, player, game_map, fov_recompute, screen_width, screen_height, colours)
             tcod.console_flush()
             clear_all(con, entities)
+            fov_recompute = False
 
 
 if __name__ == '__main__':
