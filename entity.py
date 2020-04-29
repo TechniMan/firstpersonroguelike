@@ -1,7 +1,12 @@
 import math
 import numpy
+from enum import Enum
 
-from render_functions import RenderOrder
+
+class RenderOrder(Enum):
+    CORPSE = 1
+    ITEM = 2
+    ACTOR = 3
 
 
 # returns an array of all True with False in place of entities

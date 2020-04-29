@@ -1,15 +1,16 @@
 import tcod
-from enum import Enum
+import tcod.color
+import tcod.console
 
-
-class RenderOrder(Enum):
-    CORPSE = 1
-    ITEM = 2
-    ACTOR = 3
+from entity import Entity, RenderOrder
+from map_objects.game_map import GameMap
+from game_messages import MessageLog
 
 
 # Draw all entities in the list
-def render_all(con, entities, player, game_map, fov_recompute, screen_width, screen_height, colours):
+def render_all(root: tcod.console.Console, con: tcod.console.Console, panel: tcod.console.Console, entities: list,
+               player: Entity, game_map: GameMap, fov_recompute: bool, message_log: MessageLog, screen_width: int,
+               screen_height: int, bar_width: int, panel_height: int, panel_y: int, mouse, colours: dict):
     # Draw all the tiles in the game map
     if fov_recompute:
         for y in range(game_map.height):
@@ -34,24 +35,63 @@ def render_all(con, entities, player, game_map, fov_recompute, screen_width, scr
     for entity in entities_in_render_order:
         draw_entity(con, entity, game_map)
 
-    tcod.console_set_default_foreground(con, tcod.white)
-    tcod.console_print_ex(con, 1, screen_height - 2, tcod.BKGND_NONE, tcod.LEFT,
-                          'HP: {0:02}/{1:02}'.format(player.fighter.hp, player.fighter.max_hp))
+    con.blit(root, 0, 0, 0, 0, screen_width, screen_height)
 
-    tcod.console_blit(con, 0, 0, screen_width, screen_height, 0, 0, 0)
+    # PANEL #
+    panel.default_bg = tcod.black
+    panel.clear()
+
+    # print message log
+    y = 1
+    for message in message_log.messages:
+        panel.default_fg = message.colour
+        panel.print_(message_log.x, y, message.text, tcod.BKGND_NONE, tcod.LEFT)
+        y += 1
+
+    render_bar(panel, 1, 1, bar_width, 'HP', player.fighter.hp, player.fighter.max_hp, tcod.red, tcod.darkest_red)
+
+    panel.default_fg = tcod.light_grey
+    panel.print_(1, 0, get_names_under_mouse(mouse, entities, game_map), tcod.BKGND_NONE, tcod.LEFT)
+
+    panel.blit(root, 0, panel_y, 0, 0, screen_width, panel_height)
 
 
-def clear_all(con, entities):
+def clear_all(con: tcod.console.Console, entities: list):
     for entity in entities:
         clear_entity(con, entity)
 
 
-def draw_entity(con, entity, game_map):
+def draw_entity(con: tcod.console.Console, entity: Entity, game_map: GameMap):
     if game_map.fov(entity.x, entity.y):
-        tcod.console_set_default_foreground(con, entity.colour)
+        con.default_fg = entity.colour
         tcod.console_put_char(con, entity.x, entity.y, entity.char, tcod.BKGND_NONE)
 
 
+def get_names_under_mouse(mouse, entities, game_map):
+    (x, y) = mouse
+
+    names = [entity.name for entity in entities if entity.x == x and entity.y == y and game_map.fov(entity.x, entity.y)]
+    names = ', '.join(names)
+
+    return names.capitalize()
+
+
+def render_bar(panel: tcod.console.Console, x: int, y: int, total_width: int, name: str, value: int, maximum: int,
+               bar_colour: tcod.color.Color, back_colour: tcod.color.Color):
+    bar_width = int(float(value) / maximum * total_width)
+
+    panel.default_bg = back_colour
+    panel.rect(x, y, total_width, 1, False, tcod.BKGND_SCREEN)
+
+    panel.default_bg = bar_colour
+    if bar_width > 0:
+        tcod.console_rect(panel, x, y, bar_width, 1, False, tcod.BKGND_SCREEN)
+        panel.rect(x, y, bar_width, 1, False, tcod.BKGND_SCREEN)
+
+    panel.default_fg = tcod.white
+    panel.print_(int(x + total_width / 2), y, '{0}: {1}/{2}'.format(name, value, maximum), tcod.BKGND_NONE, tcod.CENTER)
+
+
 # erase the character that represents this object
-def clear_entity(con, entity):
+def clear_entity(con: tcod.console.Console, entity: Entity):
     tcod.console_put_char(con, entity.x, entity.y, ' ', tcod.BKGND_NONE)
