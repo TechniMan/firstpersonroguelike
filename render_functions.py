@@ -5,12 +5,15 @@ import tcod.console
 from entity import Entity, RenderOrder
 from map_objects.game_map import GameMap
 from game_messages import MessageLog
+from game_states import GameStates
+from menus import inventory_menu
 
 
 # Draw all entities in the list
 def render_all(root: tcod.console.Console, con: tcod.console.Console, panel: tcod.console.Console, entities: list,
                player: Entity, game_map: GameMap, fov_recompute: bool, message_log: MessageLog, screen_width: int,
-               screen_height: int, bar_width: int, panel_height: int, panel_y: int, mouse, colours: dict):
+               screen_height: int, bar_width: int, panel_height: int, panel_y: int, mouse, colours: dict,
+               game_state: GameStates):
     # Draw all the tiles in the game map
     if fov_recompute:
         for y in range(game_map.height):
@@ -54,6 +57,11 @@ def render_all(root: tcod.console.Console, con: tcod.console.Console, panel: tco
     panel.print_(1, 0, get_names_under_mouse(mouse, entities, game_map), tcod.BKGND_NONE, tcod.LEFT)
 
     panel.blit(root, 0, panel_y, 0, 0, screen_width, panel_height)
+
+    if game_state == GameStates.SHOW_INVENTORY:
+        inventory_menu(root, con, 'Select an item to use', player.inventory, 50, screen_width, screen_height)
+    elif game_state is GameStates.DROP_INVENTORY:
+        inventory_menu(root, con, 'Select an item to drop', player.inventory, 50, screen_width, screen_height)
 
 
 def clear_all(con: tcod.console.Console, entities: list):

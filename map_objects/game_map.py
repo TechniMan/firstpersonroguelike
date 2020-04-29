@@ -6,9 +6,11 @@ from random import randint
 
 from components.ai import BasicMonster
 from components.fighter import Fighter
+from components.item import Item
 from map_objects.rectangle import Rectangle
 from entity import Entity, get_walkable_map_from_blocking_entities
 from render_functions import RenderOrder
+from item_functions import heal
 
 
 # Container class for a tcod.map.Map and extras
@@ -67,9 +69,8 @@ class GameMap:
         return self.explored_tiles[y, x]
 
     # Create rooms for map
-    def make_map(self, max_rooms, room_min_size, room_max_size,
-                 map_width, map_height,
-                 player, entities, max_monsters_per_room):
+    def make_map(self, max_rooms: int, room_min_size: int, room_max_size: int, map_width: int, map_height: int,
+                 player: Entity, entities: list, max_monsters_per_room: int, max_items_per_room: int):
         self.initialise_map()
         rooms = []
         num_rooms = 0
@@ -101,7 +102,7 @@ class GameMap:
                         self.create_h_tunnel(prev_x, new_x, new_y)
                 rooms.append(new_room)
                 num_rooms += 1
-                self.place_entities(new_room, entities, max_monsters_per_room)
+                self.place_entities(new_room, entities, max_monsters_per_room, max_items_per_room)
 
         # update the pathfinding to match the new map
         self.astar = tcod.path.AStar(self.map.walkable)
@@ -120,9 +121,10 @@ class GameMap:
         for y in range(min(y1, y2), max(y1, y2) + 1):
             self.open_tile(x, y)
 
-    def place_entities(self, room, entities, max_monsters_per_room):
+    def place_entities(self, room, entities, max_monsters_per_room, max_items_per_room):
         # Get a random number of monsters
         number_of_monsters = randint(0, max_monsters_per_room)
+        number_of_items = randint(0, max_items_per_room)
 
         for i in range(number_of_monsters):
             # Choose a random location in the room
@@ -141,6 +143,15 @@ class GameMap:
                     monster = Entity(x, y, 'T', tcod.darker_green, 'Troll', render_order=RenderOrder.ACTOR, blocks=True,
                                      fighter=fighter_component, ai=ai_component)
                 entities.append(monster)
+
+        for i in range(number_of_items):
+            # Choose a random location in the room
+            x = randint(room.x1 + 1, room.x2 - 1)
+            y = randint(room.y1 + 1, room.y2 - 1)
+            if not any([entity for entity in entities if entity.x == x and entity.y == y]):
+                item_component = Item(heal, amount=4)
+                item = Entity(x, y, 'p', tcod.violet, 'Healing Potion', render_order=RenderOrder.ITEM, item=item_component)
+                entities.append(item)
 
     def open_tile(self, x, y):
         self.map.walkable[y, x] = True

@@ -9,7 +9,8 @@ from map_objects.game_map import GameMap
 from game_states import GameStates
 from components.fighter import Fighter
 from death_functions import kill_monster, kill_player
-from game_messages import MessageLog
+from game_messages import Message, MessageLog
+from components.inventory import Inventory
 
 
 def main():
@@ -22,6 +23,7 @@ def main():
     room_max_size = 10
     max_rooms = 30
     max_monsters_per_room = 3
+    max_items_per_room = 2
     # stats panel vars
     bar_width = 20
     panel_height = 7
@@ -36,6 +38,7 @@ def main():
     fov_recompute = True
     # game vars
     game_state = GameStates.PLAYER_TURN
+    previous_game_state = game_state
 
     colours = {
         'dark_wall': tcod.Color(0, 0, 100),
@@ -50,13 +53,14 @@ def main():
         panel = tcod.console.Console(screen_width, panel_height)
 
         fighter_component = Fighter(30, 2, 5)
+        inventory_component = Inventory(26)
         player = Entity(0, 0, '@', tcod.white, 'Player', render_order=RenderOrder.ACTOR, blocks=True,
-                        fighter=fighter_component)
+                        fighter=fighter_component, inventory=inventory_component)
         entities = [player]
 
         game_map = GameMap(map_width, map_height)
         game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height,
-                          player, entities, max_monsters_per_room)
+                          player, entities, max_monsters_per_room, max_items_per_room)
         game_map.recompute_fov(player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
 
         message_log = MessageLog(message_x, message_width, message_height)
@@ -73,26 +77,63 @@ def main():
                 if event.type == "QUIT":
                     raise SystemExit()
                 elif event.type == "MOUSEMOTION":
+                    # record the new mouse position, render_all will take care of the rest
                     mouse = event.tile
                 # player keyboard interaction
-                elif event.type == "KEYDOWN" and game_state == GameStates.PLAYER_TURN:
-                    action = handle_keys(event)
+                elif event.type == "KEYDOWN":
+                    action = handle_keys(event, game_state)
+
                     if len(action) == 0:
                         continue
-                    elif action.get('exit'):
-                        raise SystemExit()
 
-                    dx, dy = action.get('move')
-                    to_x, to_y = player.x + dx, player.y + dy
-                    if game_map.walkable(to_x, to_y):
-                        target = get_blocking_entities_at_location(entities, to_x, to_y)
-                        if target:
-                            player_turn_results.extend(player.fighter.attack(target))
+                    elif action.get('exit'):
+                        if game_state in (GameStates.SHOW_INVENTORY, GameStates.DROP_INVENTORY):
+                            game_state = previous_game_state
                         else:
-                            player.move(dx, dy)
-                            fov_recompute = True
-                        # end our turn
+                            raise SystemExit()
+
+                    elif action.get('pickup') and game_state is GameStates.PLAYER_TURN:
+                        for entity in entities:
+                            if entity.item and entity.x == player.x and entity.y == player.y:
+                                pickup_results = player.inventory.add_item(entity)
+                                player_turn_results.extend(pickup_results)
+                                break
+                        else:
+                            message_log.add_message(Message('You inspect the empty ground below you. Looks pretty dirty', tcod.yellow))
                         game_state = GameStates.ENEMIES_TURN
+
+                    elif action.get('show_inventory') and game_state is GameStates.PLAYER_TURN:
+                        previous_game_state = game_state
+                        game_state = GameStates.SHOW_INVENTORY
+
+                    elif action.get('drop_inventory') and game_state is GameStates.PLAYER_TURN:
+                        previous_game_state = game_state
+                        game_state = GameStates.DROP_INVENTORY
+
+                    elif action.get('inventory_index') is not None and previous_game_state is not GameStates.PLAYER_DEAD:
+                        inventory_index = action.get('inventory_index')
+                        if inventory_index < len(player.inventory.items):
+                            item = player.inventory.items[inventory_index]
+                            if game_state is GameStates.SHOW_INVENTORY:
+                                message_log.add_message(Message('Used ' + item.name))
+                                player_turn_results.extend(player.inventory.use_item(item))
+                            elif game_state is GameStates.DROP_INVENTORY:
+                                message_log.add_message(Message('Dropped ' + item.name))
+                                player_turn_results.extend(player.inventory.drop_item(item))
+                            game_state = GameStates.ENEMIES_TURN
+
+                    elif action.get('move') and game_state is GameStates.PLAYER_TURN:
+                        dx, dy = action.get('move')
+                        to_x, to_y = player.x + dx, player.y + dy
+                        if game_map.walkable(to_x, to_y):
+                            target = get_blocking_entities_at_location(entities, to_x, to_y)
+                            if target:
+                                player_turn_results.extend(player.fighter.attack(target))
+                            else:
+                                player.move(dx, dy)
+                                fov_recompute = True
+                            # end our turn
+                            game_state = GameStates.ENEMIES_TURN
                 # end_switch event.type
 
                 # process player's turn results
@@ -108,10 +149,14 @@ def main():
                         else:
                             message = kill_monster(dead_entity)
                         message_log.add_message(message)
+                    if ptr.get('item_added'):
+                        entities.remove(ptr.get('item_added'))
+                    if ptr.get('item_dropped'):
+                        entities.append(ptr.get('item_dropped'))
                 # end_for player_turn_results
 
                 # run the enemy turn
-                if game_state == GameStates.ENEMIES_TURN:
+                if game_state is GameStates.ENEMIES_TURN:
                     for entity in entities:
                         if entity.ai:
                             enemy_turn_results = entity.ai.take_turn(player, game_map, entities)
@@ -123,14 +168,14 @@ def main():
                                 if message:
                                     message_log.add_message(message)
                                 if dead_entity:
-                                    if dead_entity == player:
+                                    if dead_entity is player:
                                         message, game_state = kill_player(player)
                                     else:
                                         message = kill_monster(dead_entity)
                                     message_log.add_message(message)
-                                    if game_state == GameStates.PLAYER_DEAD:
+                                    if game_state is GameStates.PLAYER_DEAD:
                                         break
-                            if game_state == GameStates.PLAYER_DEAD:
+                            if game_state is GameStates.PLAYER_DEAD:
                                 break
                     else:
                         game_state = GameStates.PLAYER_TURN
@@ -141,7 +186,7 @@ def main():
 
                 # draw to screen
                 render_all(root_console, con, panel, entities, player, game_map, fov_recompute, message_log, screen_width,
-                           screen_height, bar_width, panel_height, panel_y, mouse, colours)
+                           screen_height, bar_width, panel_height, panel_y, mouse, colours, game_state)
                 tcod.console_flush()
                 clear_all(con, entities)
                 fov_recompute = False

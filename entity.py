@@ -27,20 +27,28 @@ def get_blocking_entities_at_location(entities, destination_x, destination_y):
 
 # A generic object to represent players, enemies, items, etc.
 class Entity:
-    def __init__(self, x, y, char, colour, name, render_order=RenderOrder.CORPSE, blocks=False, fighter=None, ai=None):
+    def __init__(self, x, y, char, colour, name, render_order=RenderOrder.CORPSE, blocks=False,
+                 fighter=None, ai=None, item=None, inventory=None):
         self.x = x
         self.y = y
         self.char = char
         self.colour = colour
         self.name = name
+        self.render_order = render_order
         self.blocks = blocks
         self.fighter = fighter
         self.ai = ai
-        self.render_order = render_order
+        self.item = item
+        self.inventory = inventory
+
         if fighter:
             self.fighter.owner = self
         if ai:
             self.ai.owner = self
+        if item:
+            self.item.owner = self
+        if inventory:
+            self.inventory.owner = self
 
     # Move the entity by a given amount
     def move(self, dx, dy):
