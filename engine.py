@@ -4,8 +4,8 @@ import tcod.event
 
 from input_handlers import handle_keys
 from entity import Entity, get_blocking_entities_at_location
-from render_functions import clear_all, render_all, RenderOrder
-from map_objects.game_map import GameMap
+from render_functions import clear_all, render_map, render_panel, render_menu
+from map_objects.game_map import GameMap, RenderOrder
 from game_states import GameStates
 from components.fighter import Fighter
 from death_functions import kill_monster, kill_player
@@ -49,8 +49,8 @@ def main():
 
     tcod.console_set_custom_font('arial10x10.png', tcod.FONT_TYPE_GREYSCALE | tcod.FONT_LAYOUT_TCOD)
     with tcod.console_init_root(screen_width, screen_height, 'tcod tutorial part 2', vsync=True) as root_console:
-        con = tcod.console.Console(screen_width, screen_height)
-        panel = tcod.console.Console(screen_width, panel_height)
+        map_console = tcod.console.Console(screen_width, screen_height)
+        panel_console = tcod.console.Console(screen_width, panel_height)
 
         fighter_component = Fighter(30, 2, 5)
         inventory_component = Inventory(26)
@@ -184,11 +184,14 @@ def main():
                 if fov_recompute:
                     game_map.recompute_fov(player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
 
-                # draw to screen
-                render_all(root_console, con, panel, entities, player, game_map, fov_recompute, message_log, screen_width,
-                           screen_height, bar_width, panel_height, panel_y, mouse, colours, game_state)
+                # draw each part of the screen
+                render_map(root_console, map_console, game_map, entities, 0, 0, colours, fov_recompute)
+                render_panel(root_console, panel_console, entities, player, game_map, message_log, screen_width,
+                             bar_width, panel_height, 0, panel_y, mouse)
+                render_menu(root_console, player, screen_width, screen_height, game_state)
+
                 tcod.console_flush()
-                clear_all(con, entities)
+                clear_all(map_console, entities)
                 fov_recompute = False
 
 

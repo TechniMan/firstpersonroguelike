@@ -4,13 +4,13 @@ import tcod.console
 from components.inventory import Inventory
 
 
-def menu(root: tcod.console.Console, con: tcod.console.Console, header: str, options: list, width: int,
+def menu(root: tcod.console.Console, header: str, options: list, width: int,
          screen_width: int, screen_height: int):
     if len(options) > 26:
         raise ValueError('Cannot have a menu with more than 26 options')
 
     # calculate total height for header (after auto-wrap) and one line per option
-    header_height = con.get_height_rect(0, 0, width, screen_height, header)
+    header_height = root.get_height_rect(0, 0, width, screen_height, header)
     height = len(options) + header_height
 
     # create an off-screen console that represents the menu's window
@@ -36,7 +36,7 @@ def menu(root: tcod.console.Console, con: tcod.console.Console, header: str, opt
     window.blit(root, x, y, 0, 0, width, height, 1.0, 0.7)
 
 
-def inventory_menu(root: tcod.console.Console, con: tcod.console.Console, header: str, inventory: Inventory,
+def inventory_menu(root: tcod.console.Console, header: str, inventory: Inventory,
                    inventory_width: int, screen_width: int, screen_height: int) -> None:
     """
     Show a menu with each item of the inventory as an option
@@ -53,4 +53,4 @@ def inventory_menu(root: tcod.console.Console, con: tcod.console.Console, header
         options = ['Inventory is empty']
     else:
         options = [item.name for item in inventory.items]
-    menu(root, con, header, options, inventory_width, screen_width, screen_height)
+    menu(root, header, options, inventory_width, screen_width, screen_height)

@@ -2,6 +2,7 @@ import tcod
 import tcod.map
 import tcod.path
 import numpy
+from enum import Enum
 from random import randint
 
 from components.ai import BasicMonster
@@ -9,8 +10,13 @@ from components.fighter import Fighter
 from components.item import Item
 from map_objects.rectangle import Rectangle
 from entity import Entity, get_walkable_map_from_blocking_entities
-from render_functions import RenderOrder
 from item_functions import heal
+
+
+class RenderOrder(Enum):
+    CORPSE = 1
+    ITEM = 2
+    ACTOR = 3
 
 
 # Container class for a tcod.map.Map and extras

@@ -14,6 +14,7 @@ class MessageLog:
         self.width = width
         self.height = height
         self.messages = []
+        self.bg = tcod.black
 
     def add_message(self, message):
         # split the message across lines if necessary
