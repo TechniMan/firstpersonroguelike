@@ -62,6 +62,15 @@ def handle_player_turn_keys(sym, scancode):
     elif scancode is tcod.event.SCANCODE_KP_3:
         return {'move': (1, 1)}
 
+    if scancode is tcod.event.SCANCODE_UP:
+        return {'move2': 'forward'}
+    elif scancode is tcod.event.SCANCODE_DOWN:
+        return {'move2': 'rearward'}
+    elif scancode is tcod.event.SCANCODE_LEFT:
+        return {'turn': 'left'}
+    elif scancode is tcod.event.SCANCODE_RIGHT:
+        return {'turn': 'right'}
+
     # No key was pressed
     return {}
 

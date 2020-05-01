@@ -25,6 +25,13 @@ def get_blocking_entities_at_location(entities, destination_x, destination_y):
     return None
 
 
+def get_first_entity_at_location(entities, destination_x, destination_y):
+    for entity in entities:
+        if entity.x == destination_x and entity.y == destination_y and entity.name != 'Player':
+            return entity
+    return None
+
+
 # A generic object to represent players, enemies, items, etc.
 class Entity:
     def __init__(self, x, y, char, colour, name, render_order=RenderOrder.CORPSE, blocks=False,

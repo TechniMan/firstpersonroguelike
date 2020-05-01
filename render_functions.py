@@ -1,14 +1,130 @@
+import math
+# from PIL import Image
 import tcod
 import tcod.color
 import tcod.console
 
-from entity import Entity
+from entity import Entity, get_first_entity_at_location
 from map_objects.game_map import GameMap
 from game_messages import MessageLog
 from game_states import GameStates
 from menus import inventory_menu
 
 
+def old_lerp(a: float, b: float, t: float) -> float:
+    return (t - a) / (b - a)
+
+
+def slerp_float(a: float, b: float, t: float) -> float:
+    """
+    Returns curved value of how far t is from a relative to b
+    """
+    x = a + t * (b - a)
+    return x / b
+
+
+# render the 3D viewport
+def render_viewport(root_console: tcod.console.Console, viewport_console: tcod.console.Console, viewport_x: int,
+                    viewport_y: int, viewport_width: int, viewport_height: int, game_map: GameMap, entities: list,
+                    colours: dict, player_x: float, player_y: float, player_rot: float, fov_radius: int,
+                    rerender: bool, wall_texture):
+    """
+    Raycasting algorithm based on javidx9's excellent YouTube video, 'Code-It-Yourself! First Person Shooter (Quick and Simple C++)'
+
+    """
+    if rerender:
+        texture_width = 32
+        # pi/4 rad = 45 deg (pi/3=60, pi/2=90, pi=180)
+        fov = math.pi / 3.0
+        cam_x = player_x + 0.5
+        cam_y = player_y + 0.5
+        ground_colour = colours.get('light_ground')
+        wall_colour = colours.get('light_wall')
+        viewport_console.clear()
+
+        for x in range(viewport_width):
+            # render a column based on raycasting
+            ray_angle = (player_rot - fov / 2.0) + (x / float(viewport_width)) * fov
+            eye_x = math.sin(ray_angle)
+            eye_y = math.cos(ray_angle)
+
+            distance_to_wall = 0.0
+            hit_wall = False
+            hit_wall_corner = False
+            distance_to_entity = 0.0
+            hit_entity = False
+            entity = None
+            wall_x = 0.0
+
+            while not hit_wall and distance_to_wall < fov_radius:
+                distance_to_wall += 0.1
+                if not hit_entity:
+                    distance_to_entity += 0.1
+                test_x = int(cam_x + eye_x * distance_to_wall)
+                test_y = int(cam_y + eye_y * distance_to_wall)
+
+                # if outside of game map
+                if test_x < 0 or test_x >= game_map.width or test_y < 0 or test_y >= game_map.height:
+                    hit_wall = True
+                    distance_to_wall = fov_radius
+                # else
+                else:
+                    # can we see an entity
+                    if not hit_entity:
+                        entities_in_render_order = sorted(entities, key=lambda e: 4 - e.render_order.value)
+                        e = get_first_entity_at_location(entities_in_render_order, test_x, test_y)
+                        if e is not None:
+                            hit_entity = True
+                            entity = e
+                    # have we hit a wall yet
+                    if not game_map.walkable(test_x, test_y):
+                        hit_wall = True
+
+                        # where on the wall have we hit?
+                        #vy = float(test_y - cam_y)
+                        #vx = float(test_x - cam_x)
+                        #mag = math.sqrt(vx**2 + vy**2)
+                        #dot = (eye_x * vx / mag) + (eye_y * vy / mag)
+                        #wall_x = math.acos(dot)
+            # end_while
+
+            ceiling = float(viewport_height / 2.0) - viewport_height / float(distance_to_wall)
+            floor = viewport_height - ceiling
+            wall_brightness = 1.0 - slerp_float(0, fov_radius, distance_to_wall / fov_radius)
+            out_of_view = distance_to_wall >= fov_radius
+            x_cell = viewport_width - x - 1
+            half_viewport_height = viewport_height / 2
+            for y in range(viewport_height):
+                if y < ceiling:
+                    brightness = 1.0 - slerp_float(0, half_viewport_height, y / half_viewport_height)
+                    tcod.console_set_char_background(viewport_console, x_cell, y,
+                                                     wall_colour * brightness, tcod.BKGND_SET)
+                elif y < floor:
+                    if out_of_view:
+                        tcod.console_set_char_background(viewport_console, x_cell, y, tcod.black, tcod.BKGND_SET)
+                    else:
+                        #u = int(wall_x * texture_width)
+                        #v = int(((y - ceiling) / (floor - ceiling)) * texture_width)
+                        #pixel = wall_texture.getpixel((u, v))
+                        #tex_col = (int(pixel[0] * wall_brightness), int(pixel[1] * wall_brightness),
+                                   #int(pixel[2] * wall_brightness))
+                        #tcod.console_set_char_background(viewport_console, x_cell, y, tex_col, tcod.BKGND_SET)
+                        tcod.console_set_char_background(viewport_console, x_cell, y, wall_colour * wall_brightness, tcod.BKGND_SET)
+                else:
+                    brightness = slerp_float(half_viewport_height, viewport_height, (y - half_viewport_height) / half_viewport_height)
+                    tcod.console_set_char_background(viewport_console, x_cell, y, ground_colour * brightness, tcod.BKGND_SET)
+
+            # did we find an entity
+            if False and entity:
+                start = int(float(viewport_height / 2.0) - viewport_height / float(distance_to_entity))
+                height = viewport_height - start - start
+                viewport_console.draw_rect(x_cell, start, 1, height, ord(entity.char), entity.colour)
+        # end_for x
+    viewport_console.blit(root_console, viewport_x, viewport_y, 0, 0, viewport_width, viewport_height)
+    return
+
+
+# render the map
 def render_map(root_console: tcod.console.Console, map_console: tcod.console.Console, game_map: GameMap, entities: list,
                start_x: int, start_y: int, colours: dict, fov_recompute: bool):
     # render map tiles only when a change has occurred
@@ -43,9 +159,8 @@ def render_map(root_console: tcod.console.Console, map_console: tcod.console.Con
 
 # render panel
 def render_panel(root_console: tcod.console.Console, panel_console: tcod.console.Console, entities: list,
-                 player: Entity, game_map: GameMap, message_log: MessageLog, panel_width: int, bar_width: int,
+                 player: Entity, game_map: GameMap, message_log: MessageLog, bar_width: int, panel_width: int,
                  panel_height: int, panel_x: int, panel_y: int, mouse: tuple):
-    # PANEL #
     panel_console.default_bg = tcod.black
     panel_console.clear()
 
