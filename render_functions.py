@@ -44,81 +44,111 @@ def render_viewport(root_console: tcod.console.Console, viewport_console: tcod.c
 
         for x in range(viewport_width):
             # render a column based on raycasting
-            ray_angle = (player_rot - fov / 2.0) + (x / float(viewport_width)) * fov
+            ray_angle = (player_rot + fov / 2.0) - (x / float(viewport_width)) * fov
             eye_x = math.sin(ray_angle)
             eye_y = math.cos(ray_angle)
 
             distance_to_wall = 0.0
             hit_wall = False
-            hit_wall_corner = False
             distance_to_entity = 0.0
             hit_entity = False
-            entity = None
+            entity: Entity = None
             wall_x = 0.0
+            entity_x = 0.0
+
+            ray_step = 0.2
+            prev_test_x = 0.0
+            prev_test_y = 0.0
 
             while not hit_wall and distance_to_wall < fov_radius:
-                distance_to_wall += 0.1
+                distance_to_wall += ray_step
                 if not hit_entity:
-                    distance_to_entity += 0.1
-                test_x = int(cam_x + eye_x * distance_to_wall)
-                test_y = int(cam_y + eye_y * distance_to_wall)
+                    distance_to_entity += ray_step
+                test_x = cam_x + eye_x * distance_to_wall
+                test_y = cam_y + eye_y * distance_to_wall
+                i_test_x = int(test_x)
+                i_test_y = int(test_y)
 
                 # if outside of game map
-                if test_x < 0 or test_x >= game_map.width or test_y < 0 or test_y >= game_map.height:
+                if i_test_x < 0 or i_test_x >= game_map.width or i_test_y < 0 or i_test_y >= game_map.height:
                     hit_wall = True
                     distance_to_wall = fov_radius
                 # else
                 else:
-                    # can we see an entity
                     if not hit_entity:
+                        # can we see an entity
                         entities_in_render_order = sorted(entities, key=lambda e: 4 - e.render_order.value)
-                        e = get_first_entity_at_location(entities_in_render_order, test_x, test_y)
+                        e = get_first_entity_at_location(entities_in_render_order, i_test_x, i_test_y)
                         if e is not None:
                             hit_entity = True
                             entity = e
+                            if abs(prev_test_x - test_x) > abs(prev_test_y - test_y):
+                                entity_x = test_x - i_test_x
+                            else:
+                                entity_x = test_y - i_test_y
                     # have we hit a wall yet
-                    if not game_map.walkable(test_x, test_y):
+                    if not game_map.walkable(i_test_x, i_test_y):
                         hit_wall = True
-
                         # where on the wall have we hit?
-                        #vy = float(test_y - cam_y)
-                        #vx = float(test_x - cam_x)
-                        #mag = math.sqrt(vx**2 + vy**2)
-                        #dot = (eye_x * vx / mag) + (eye_y * vy / mag)
-                        #wall_x = math.acos(dot)
+                        if abs(prev_test_x - test_x) > abs(prev_test_y - test_y):
+                            wall_x = test_x - i_test_x
+                        else:
+                            wall_x = test_y - i_test_y
+                prev_test_x = test_x
+                prev_test_y = test_y
             # end_while
 
+            # draw this column of the room
             ceiling = float(viewport_height / 2.0) - viewport_height / float(distance_to_wall)
             floor = viewport_height - ceiling
             wall_brightness = 1.0 - slerp_float(0, fov_radius, distance_to_wall / fov_radius)
+            if wall_brightness < 0.0:
+                wall_brightness = 1.0
+            elif wall_brightness > 1.0:
+                wall_brightness = 1.0
             out_of_view = distance_to_wall >= fov_radius
-            x_cell = viewport_width - x - 1
+            x_cell = x  # viewport_width - x - 1
             half_viewport_height = viewport_height / 2
             for y in range(viewport_height):
+                # ceiling
                 if y < ceiling:
                     brightness = 1.0 - slerp_float(0, half_viewport_height, y / half_viewport_height)
                     tcod.console_set_char_background(viewport_console, x_cell, y,
                                                      wall_colour * brightness, tcod.BKGND_SET)
+                # wall
                 elif y < floor:
                     if out_of_view:
                         tcod.console_set_char_background(viewport_console, x_cell, y, tcod.black, tcod.BKGND_SET)
-                    else:
-                        #u = int(wall_x * texture_width)
-                        #v = int(((y - ceiling) / (floor - ceiling)) * texture_width)
-                        #pixel = wall_texture.getpixel((u, v))
-                        #tex_col = (int(pixel[0] * wall_brightness), int(pixel[1] * wall_brightness),
-                                   #int(pixel[2] * wall_brightness))
-                        #tcod.console_set_char_background(viewport_console, x_cell, y, tex_col, tcod.BKGND_SET)
-                        tcod.console_set_char_background(viewport_console, x_cell, y, wall_colour * wall_brightness, tcod.BKGND_SET)
+                    elif hit_wall:
+                        u = int(wall_x * texture_width)
+                        if u >= 32:
+                            u = 31
+                        v = int(((y - ceiling) / (floor - ceiling)) * texture_width)
+                        pixel = wall_texture.getpixel((u, v))
+                        tex_col = (int(pixel[0] * wall_brightness), int(pixel[1] * wall_brightness),
+                                   int(pixel[2] * wall_brightness))
+                        tcod.console_set_char_background(viewport_console, x_cell, y, tex_col, tcod.BKGND_SET)
+                # floor
                 else:
                     brightness = slerp_float(half_viewport_height, viewport_height, (y - half_viewport_height) / half_viewport_height)
                     tcod.console_set_char_background(viewport_console, x_cell, y, ground_colour * brightness, tcod.BKGND_SET)
 
-            # did we find an entity
-            if False and entity:
-                start = int(float(viewport_height / 2.0) - viewport_height / float(distance_to_entity))
-                height = viewport_height - start - start
-                viewport_console.draw_rect(x_cell, start, 1, height, ord(entity.char), entity.colour)
+            # draw this column of entity (if we found one)
+            if hit_entity and entity.texture:
+                height = (viewport_height / float(distance_to_entity))
+                start = int((viewport_height - height) / 2.0)
+                entity_brightness = 1.0 - slerp_float(0, fov_radius, distance_to_entity / fov_radius)
+                for y in range(int(height)):
+                    u = int(entity_x * texture_width)
+                    if u >= 32:
+                        u = 31
+                    v = int((y / height) * texture_width)
+                    pixel = entity.texture.getpixel((u, v))
+                    # ignore transparent texels
+                    if pixel[3] != 0:
+                        tex_col = (int(pixel[0] * entity_brightness), int(pixel[1] * entity_brightness),
+                                   int(pixel[2] * entity_brightness))
+                        tcod.console_set_char_background(viewport_console, x_cell, start + y, tex_col, tcod.BKGND_SET)
         # end_for x
     viewport_console.blit(root_console, viewport_x, viewport_y, 0, 0, viewport_width, viewport_height)
     return
@@ -160,7 +190,7 @@ def render_map(root_console: tcod.console.Console, map_console: tcod.console.Con
 # render panel
 def render_panel(root_console: tcod.console.Console, panel_console: tcod.console.Console, entities: list,
                  player: Entity, game_map: GameMap, message_log: MessageLog, bar_width: int, panel_width: int,
-                 panel_height: int, panel_x: int, panel_y: int, mouse: tuple):
+                 panel_height: int, panel_x: int, panel_y: int, mouse: tuple, fps: float):
     panel_console.default_bg = tcod.black
     panel_console.clear()
 
@@ -177,6 +207,7 @@ def render_panel(root_console: tcod.console.Console, panel_console: tcod.console
 
     panel_console.default_fg = tcod.light_grey
     panel_console.print_(1, 0, get_names_under_mouse(mouse, entities, game_map), tcod.BKGND_NONE, tcod.LEFT)
+    # panel_console.print(1, 2, 'FPS: {0}'.format(fps), bg_blend=tcod.BKGND_NONE)
 
     panel_console.blit(root_console, panel_x, panel_y, 0, 0, panel_width, panel_height)
     return

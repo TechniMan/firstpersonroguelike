@@ -35,7 +35,7 @@ def get_first_entity_at_location(entities, destination_x, destination_y):
 # A generic object to represent players, enemies, items, etc.
 class Entity:
     def __init__(self, x, y, char, colour, name, render_order=RenderOrder.CORPSE, blocks=False,
-                 fighter=None, ai=None, item=None, inventory=None):
+                 fighter=None, ai=None, item=None, inventory=None, texture=None):
         self.x = x
         self.y = y
         self.char = char
@@ -47,6 +47,7 @@ class Entity:
         self.ai = ai
         self.item = item
         self.inventory = inventory
+        self.texture = texture
 
         if fighter:
             self.fighter.owner = self

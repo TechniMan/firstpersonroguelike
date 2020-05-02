@@ -2,6 +2,7 @@ import tcod
 import tcod.map
 import tcod.path
 import numpy
+from PIL import Image
 from enum import Enum
 from random import randint
 
@@ -76,7 +77,8 @@ class GameMap:
 
     # Create rooms for map
     def make_map(self, max_rooms: int, room_min_size: int, room_max_size: int, map_width: int, map_height: int,
-                 player: Entity, entities: list, max_monsters_per_room: int, max_items_per_room: int):
+                 player: Entity, entities: list, max_monsters_per_room: int, max_items_per_room: int,
+                 orc_texture: Image, troll_texture: Image, potion_texture: Image):
         self.initialise_map()
         rooms = []
         num_rooms = 0
@@ -108,7 +110,8 @@ class GameMap:
                         self.create_h_tunnel(prev_x, new_x, new_y)
                 rooms.append(new_room)
                 num_rooms += 1
-                self.place_entities(new_room, entities, max_monsters_per_room, max_items_per_room)
+                self.place_entities(new_room, entities, max_monsters_per_room, max_items_per_room,
+                                    orc_texture, troll_texture, potion_texture)
 
         # update the pathfinding to match the new map
         self.astar = tcod.path.AStar(self.map.walkable)
@@ -127,7 +130,8 @@ class GameMap:
         for y in range(min(y1, y2), max(y1, y2) + 1):
             self.open_tile(x, y)
 
-    def place_entities(self, room, entities, max_monsters_per_room, max_items_per_room):
+    def place_entities(self, room: Rectangle, entities: list, max_monsters_per_room: int, max_items_per_room: int,
+                       orc_texture: Image, troll_texture: Image, potion_texture: Image):
         # Get a random number of monsters
         number_of_monsters = randint(0, max_monsters_per_room)
         number_of_items = randint(0, max_items_per_room)
@@ -142,12 +146,12 @@ class GameMap:
                     fighter_component = Fighter(10, 0, 3)
                     ai_component = BasicMonster()
                     monster = Entity(x, y, 'o', tcod.desaturated_green, 'Orc', render_order=RenderOrder.ACTOR,
-                                     blocks=True, fighter=fighter_component, ai=ai_component)
+                                     blocks=True, fighter=fighter_component, ai=ai_component, texture=orc_texture)
                 else:
                     fighter_component = Fighter(16, 1, 4)
                     ai_component = BasicMonster()
                     monster = Entity(x, y, 'T', tcod.darker_green, 'Troll', render_order=RenderOrder.ACTOR, blocks=True,
-                                     fighter=fighter_component, ai=ai_component)
+                                     fighter=fighter_component, ai=ai_component, texture=troll_texture)
                 entities.append(monster)
 
         for i in range(number_of_items):
@@ -156,7 +160,8 @@ class GameMap:
             y = randint(room.y1 + 1, room.y2 - 1)
             if not any([entity for entity in entities if entity.x == x and entity.y == y]):
                 item_component = Item(heal, amount=4)
-                item = Entity(x, y, 'p', tcod.violet, 'Healing Potion', render_order=RenderOrder.ITEM, item=item_component)
+                item = Entity(x, y, 'p', tcod.violet, 'Healing Potion', render_order=RenderOrder.ITEM,
+                              item=item_component, texture=potion_texture)
                 entities.append(item)
 
     def open_tile(self, x, y):

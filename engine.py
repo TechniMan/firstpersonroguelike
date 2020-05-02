@@ -3,6 +3,7 @@ from PIL import Image
 import tcod
 import tcod.console
 import tcod.event
+from time import perf_counter
 
 from input_handlers import handle_keys
 from entity import Entity, get_blocking_entities_at_location
@@ -17,20 +18,21 @@ from components.inventory import Inventory
 
 def main():
     # map vars
-    map_width = 50
-    map_height = 50
+    map_width = 40
+    map_height = 60
     room_min_size = 6
     room_max_size = 10
-    max_rooms = 30
+    max_rooms = 50
     max_monsters_per_room = 3
     max_items_per_room = 2
 
     # screen vars
-    viewport_width = 50
-    viewport_height = 50
+    viewport_width = 80
+    viewport_height = 60
     rerender_viewport = True
     map_x = viewport_width
     map_y = 0
+
     screen_width = viewport_width + map_width
 
     # stats panel vars
@@ -69,17 +71,20 @@ def main():
     player_rot = 0.0
     entities = [player]
 
+    # load assets
+    wall_texture = Image.open('assets/wall_vines0.png')
+    orc_texture = Image.open('assets/orc.png')
+    troll_texture = Image.open('assets/troll.png')
+    potion_texture = Image.open('assets/ruby.png')
+
     # init game map
     game_map = GameMap(map_width, map_height)
-    game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height,
-                      player, entities, max_monsters_per_room, max_items_per_room)
+    game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height, player, entities,
+                      max_monsters_per_room, max_items_per_room, orc_texture, troll_texture, potion_texture)
     game_map.recompute_fov(player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
 
     # init message log
     message_log = MessageLog(message_x, message_width, message_height)
-
-    # load assets
-    wall_texture = Image.open('assets/wall_vines0.png')
 
     tcod.console_set_custom_font('arial10x10.png', tcod.FONT_TYPE_GREYSCALE | tcod.FONT_LAYOUT_TCOD)
     with tcod.console_init_root(screen_width, screen_height, 'firstpersonroguelike', vsync=True) as root_console:
@@ -88,6 +93,7 @@ def main():
         panel_console = tcod.console.Console(panel_width, panel_height)
 
         mouse = (0, 0)
+        time_start = perf_counter()
 
         # game loop begin
         while True:
@@ -159,8 +165,15 @@ def main():
                             game_state = GameStates.ENEMIES_TURN
 
                     elif action.get('move2') and game_state is GameStates.PLAYER_TURN:
-                        to_x = player.x + int(math.sin(player_rot) * 1.5)
-                        to_y = player.y + int(math.cos(player_rot) * 1.5)
+                        to_x = player.x
+                        to_y = player.y
+                        if action.get('move2') == 'forward':
+                            to_x += int(math.sin(player_rot) * 1.5)
+                            to_y += int(math.cos(player_rot) * 1.5)
+                        elif action.get('move2') == 'rearward':
+                            to_x -= int(math.sin(player_rot) * 1.5)
+                            to_y -= int(math.cos(player_rot) * 1.5)
+
                         if game_map.walkable(to_x, to_y):
                             target = get_blocking_entities_at_location(entities, to_x, to_y)
                             if target:
@@ -235,10 +248,13 @@ def main():
                                 rerender_viewport or game_state is GameStates.ENEMIES_TURN,
                                 wall_texture)
                 render_map(root_console, map_console, game_map, entities, map_x, map_y, colours, fov_recompute)
-                render_panel(root_console, panel_console, entities, player, game_map, message_log, bar_width,
-                             panel_width, panel_height, panel_x, panel_y, mouse)
                 # TODO: extend render_menu to accept a top-left co-ordinate (start_x, start_y)
                 render_menu(root_console, player, screen_width, screen_height, game_state)
+
+                fps = 1.0 / (perf_counter() - time_start)
+                render_panel(root_console, panel_console, entities, player, game_map, message_log, bar_width,
+                             panel_width, panel_height, panel_x, panel_y, mouse, fps)
+                time_start = perf_counter()
 
                 tcod.console_flush()
                 clear_all(map_console, entities)
