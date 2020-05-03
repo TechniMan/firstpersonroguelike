@@ -5,7 +5,7 @@ Roguelike with a first-person 3D viewport
 Written in python using libtcod. It's kinda slow, but it works, and I didn't have to write a terminal renderer from scratch which is nice.
 
 ## How to run
-Requires Python 3 installed (I used 3.8)
+Requires Python 3 installed (I used 3.8) https://www.python.org/downloads/
 
 ```bash
 $ git clone https://github.com/TechniMan/firstpersonroguelike
@@ -23,7 +23,6 @@ When you're done with the virtual environment, simply enter:
 ```
 
 ## Controls
-
 Use the direction keys left and right to rotate 45degrees either direction, and up to move forwards. Use `g` to pick up an item you're standing on, `i` to open inventory to use an item, and `d` to open inventory to drop an item. Walking into an enemy will attack them.
 * `up`: move forwards
 * `left`: turn 45deg left
@@ -35,4 +34,6 @@ Use the direction keys left and right to rotate 45degrees either direction, and 
 * numpad `1`,`2`,`3`,`4`,`6`,`7`,`8`,`9`: move in that direction relative to the map
 * `esc` to quit
 
-Other entities aren't yet drawn in the 3D viewport. I'm working on texture mapping which should allow this.
+## To-dos
+* entity textures render badly from corners
+* entity textures scale oddly with distance

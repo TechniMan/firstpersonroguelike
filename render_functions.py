@@ -1,4 +1,5 @@
 import math
+import numpy
 # from PIL import Image
 import tcod
 import tcod.color
@@ -75,25 +76,42 @@ def render_viewport(root_console: tcod.console.Console, viewport_console: tcod.c
                     distance_to_wall = fov_radius
                 # else
                 else:
-                    if not hit_entity:
+                    # have we hit a wall yet
+                    if not game_map.walkable(i_test_x, i_test_y):
+                        hit_wall = True
+                        # where on the wall have we hit?
+                        if abs(prev_test_x - test_x) > abs(prev_test_y - test_y):
+                            wall_x = test_y - i_test_y
+                        else:
+                            wall_x = test_x - i_test_x
+
+                    # if we haven't seen an entity yet
+                    if not hit_entity and abs(distance_to_entity) > 0.6:
                         # can we see an entity
                         entities_in_render_order = sorted(entities, key=lambda e: 4 - e.render_order.value)
                         e = get_first_entity_at_location(entities_in_render_order, i_test_x, i_test_y)
                         if e is not None:
                             hit_entity = True
                             entity = e
-                            if abs(prev_test_x - test_x) > abs(prev_test_y - test_y):
-                                entity_x = test_x - i_test_x
-                            else:
-                                entity_x = test_y - i_test_y
-                    # have we hit a wall yet
-                    if not game_map.walkable(i_test_x, i_test_y):
-                        hit_wall = True
-                        # where on the wall have we hit?
-                        if abs(prev_test_x - test_x) > abs(prev_test_y - test_y):
-                            wall_x = test_x - i_test_x
-                        else:
-                            wall_x = test_y - i_test_y
+
+                            # vector maths adapted from https://stackoverflow.com/a/58542694
+                            # find the point where the ray meets the entity's centre line
+                            P = (cam_x, cam_y)  # player point
+                            Q = (i_test_x + 0.5, i_test_y + 0.5)  # entity centre point
+                            R = (eye_x, eye_y)  # dir of player vision
+                            S = (eye_y, -eye_x)  # entity plane is perpendicular
+                            PQ = numpy.subtract(Q, P)  # vector between two points
+                            PQ_mag = math.sqrt(PQ[0]**2 + PQ[1]**2)
+                            # t = PQ_mag * 0.707
+                            t = float(numpy.vdot(PQ, R) / numpy.vdot(R, (S[1], -S[0])))
+                            X = numpy.add(P, (t * R[0], t * R[1]))  # point where we hit a line through the centre of the entity's tile
+
+                            a = (Q[0] - (0.5 * S[0]), Q[1] - (0.5 * S[1]))  # approximation of the start of the entity's line
+                            b = (Q[0] + (0.5 * S[0]), Q[1] + (0.5 * S[1]))  # approximation of the end of the entity's line
+                            c = (old_lerp(a[0], b[0], X[0]), old_lerp(a[1], b[1], X[1]))
+                            entity_x = math.sqrt((X[0] - int(X[0]))**2 + (X[1] - int(X[1]))**2)
+                            # entity_x = math.sqrt(c[0]**2 + c[1]**2)
+                            distance_to_entity = math.sqrt(PQ[0]**2 + PQ[1]**2)
                 prev_test_x = test_x
                 prev_test_y = test_y
             # end_while
@@ -135,7 +153,7 @@ def render_viewport(root_console: tcod.console.Console, viewport_console: tcod.c
 
             # draw this column of entity (if we found one)
             if hit_entity and entity.texture:
-                height = (viewport_height / float(distance_to_entity))
+                height = (viewport_height / min(max(float(distance_to_entity), 0.0), 1.0))
                 start = int((viewport_height - height) / 2.0)
                 entity_brightness = 1.0 - slerp_float(0, fov_radius, distance_to_entity / fov_radius)
                 for y in range(int(height)):
